@@ -1,4 +1,4 @@
-const { allRecipes, newRecipe } = require("../controllers/recipesControllers");
+const { allRecipes, newRecipe } = require('../controllers/recipesControllers');
 
 //? GET ALL RECIPES HANDLER
 const getAllRecipes = async (req, res) => {
@@ -13,14 +13,16 @@ const getAllRecipes = async (req, res) => {
         res.status(200).send(recipeName);
       } else {
         res
-          .status(400)
+          .status(404) // mejor 404 si no existe la receta
           .send("Oops! That recipe doesn't exist. Try another one!");
       }
     } else {
       res.status(200).send(recipes);
     }
   } catch (error) {
-    res.status(400).send({ error: error.message });
+    console.log('❌ ERROR en getAllRecipes:', error.message);
+    console.log(error); // para ver más detalles en Render
+    res.status(500).send({ error: error.message });
   }
 };
 
