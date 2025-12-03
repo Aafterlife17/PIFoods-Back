@@ -1,8 +1,8 @@
-require("dotenv").config();
-const axios = require("axios");
-const { Sequelize } = require("sequelize");
+require('dotenv').config();
+const axios = require('axios');
+const { Sequelize } = require('sequelize');
 const Op = Sequelize.Op;
-const { Recipe, Diet } = require("./../../db");
+const { Recipe, Diet } = require('./../../db');
 const { KEY, URL } = process.env;
 
 //? GET RECIPES API CONTROLLER
@@ -10,20 +10,30 @@ const recipesAPI = async () => {
   const apiURL = await axios.get(
     `${URL}complexSearch?apiKey=${KEY}&addRecipeInformation=true&number=100`
   );
-  const recipes = apiURL.data.results.map((result) => {
-    const steps = result.analyzedInstructions.flatMap((instruction) =>
-      instruction.steps.map((step) => step.step)
+
+  const results = apiURL.data?.results || [];
+
+  const recipes = results.map((result) => {
+    // analyzedInstructions puede venir undefined o []
+    const steps = (result.analyzedInstructions || []).flatMap((instruction) =>
+      (instruction.steps || []).map((step) => step.step)
     );
+
+    const dietsArray = Array.isArray(result.diets) ? result.diets : [];
+
     return {
       id: result.id,
       name: result.title,
       image: result.image,
-      summary: result.summary.substring(0, 300),
-      healthScore: result.healthScore,
-      instructions: steps,
-      Diets: result.diets.map((diet) => ({ name: diet })),
+      summary: result.summary
+        ? result.summary.substring(0, 300)
+        : 'No summary available',
+      healthScore: result.healthScore ?? 0,
+      instructions: steps, // o steps.join(" ") si el front espera string
+      Diets: dietsArray.map((diet) => ({ name: diet })),
     };
   });
+
   return recipes;
 };
 
@@ -32,33 +42,23 @@ const recipesDB = async () => {
   const recipes = await Recipe.findAll({
     include: {
       model: Diet,
-      attributes: ["name"],
+      attributes: ['name'],
       through: {
         attributes: [],
       },
     },
-    order: [["createdAt", "DESC"]],
+    order: [['createdAt', 'DESC']],
   });
   return recipes;
 };
 
-// //? GET ALL RECIPES CONTROLLER (promises)
-const allRecipes = () => {
-  return recipesDB().then((recipesDB) => {
-    return recipesAPI().then((recipesAPI) => {
-      const recipesTotal = recipesDB.concat(recipesAPI);
-      return recipesTotal;
-    });
-  });
+//? GET ALL RECIPES CONTROLLER (async/await, más prolijo)
+const allRecipes = async () => {
+  const allRecipesDB = await recipesDB();
+  const allRecipesAPI = await recipesAPI();
+  const recipesTotal = allRecipesDB.concat(allRecipesAPI);
+  return recipesTotal;
 };
-
-// //? GET ALL RECIPES CONTROLLER (async/await)
-// const allRecipes = async () => {
-//   const allRecipesDB = await recipesDB();
-//   const allRecipesAPI = await recipesAPI();
-//   const recipesTotal = allRecipesDB.concat(allRecipesAPI);
-//   return recipesTotal;
-// };
 
 //? CREATE RECIPE CONTROLLER
 const newRecipe = async (
@@ -78,21 +78,22 @@ const newRecipe = async (
   });
 
   if (recipeDB.length)
-    return "Oops, that recipe already exists! Please create a new one";
+    return 'Oops, that recipe already exists! Please create a new one';
 
   const newRecipe = await Recipe.create({
-    name: name,
-    image: image,
-    summary: summary,
-    healthScore: healthScore,
-    instructions: instructions,
+    name,
+    image,
+    summary,
+    healthScore,
+    instructions,
   });
 
   const dietDB = await Diet.findAll({
     where: { name: diets },
   });
 
-  newRecipe.addDiets(dietDB);
+  await newRecipe.addDiets(dietDB);
+  return newRecipe; // así el handler puede devolver algo útil
 };
 
 module.exports = {
